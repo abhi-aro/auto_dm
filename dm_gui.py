@@ -82,17 +82,25 @@ class InstagramDMTool:
         self.usernames.clear()
         self.rejected_usernames.clear()
         username_set = set()
-        pattern = re.compile(r"(?:https?://)?(?:www\.)?instagram\.com/([^/?\s]+)|^@?([a-zA-Z0-9._]+)$")
+
+        pattern = re.compile(
+            r"(?:https?://)?(?:www\.)?(?:instagram\.com|Instagram\.com)/([a-zA-Z0-9._]+)(?:[/?].*)?$",
+            re.IGNORECASE
+        )
 
         def extract_from_value(value):
             raw = str(value).strip()
             match = pattern.search(raw)
             if match:
-                username = match.group(1) or match.group(2)
-                if username and not username.startswith(("invite", "p", "reel", "explore")):
-                    username_set.add(username)
-                else:
+                username = match.group(1)
+                lower = username.lower()
+                if lower in ["p", "reel", "invite", "invites", "explore", "stories", "contact", "directory", "accounts"]:
                     self.rejected_usernames.append(raw)
+                else:
+                    username_set.add(username)
+            elif re.match(r"^@?[a-zA-Z0-9._]+$", raw):  # raw username
+                username = raw.lstrip("@")
+                username_set.add(username)
             else:
                 self.rejected_usernames.append(raw)
 
