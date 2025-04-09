@@ -12,13 +12,14 @@ class InstagramDMTool:
         self.root.geometry("700x620")
         self.file_path = None
         self.usernames = []
+        self.rejected_usernames = []
         self.state = 'idle'  # idle, running, paused
         self.build_ui()
 
     def build_ui(self):
         # Message input
         tk.Label(self.root, text="Enter Message to Send:").pack(anchor='w', padx=10, pady=(10, 0))
-        self.message_entry = tk.Text(self.root, height=4, wrap='word')
+        self.message_entry = tk.Text(self.root, height=4, wrap='word', font=("Segoe UI Emoji", 11))
         self.message_entry.pack(fill='x', padx=10)
 
         # File selector
@@ -79,15 +80,21 @@ class InstagramDMTool:
     def extract_usernames_from_file(self, path):
         self.user_listbox.delete(0, tk.END)
         self.usernames.clear()
+        self.rejected_usernames.clear()
         username_set = set()
         pattern = re.compile(r"(?:https?://)?(?:www\.)?instagram\.com/([^/?\s]+)|^@?([a-zA-Z0-9._]+)$")
 
         def extract_from_value(value):
-            match = pattern.search(str(value).strip())
+            raw = str(value).strip()
+            match = pattern.search(raw)
             if match:
                 username = match.group(1) or match.group(2)
                 if username and not username.startswith(("invite", "p", "reel", "explore")):
                     username_set.add(username)
+                else:
+                    self.rejected_usernames.append(raw)
+            else:
+                self.rejected_usernames.append(raw)
 
         if path.endswith(".csv") or path.endswith(".txt"):
             with open(path, newline='', encoding='utf-8') as f:
@@ -106,7 +113,19 @@ class InstagramDMTool:
             self.user_listbox.insert(tk.END, user)
 
         self.log(f"{len(self.usernames)} usernames loaded.")
+        if self.rejected_usernames:
+            self.show_rejected_popup()
         self.update_buttons()
+
+    def show_rejected_popup(self):
+        popup = tk.Toplevel(self.root)
+        popup.title("Rejected Usernames")
+        popup.geometry("400x300")
+        tk.Label(popup, text="These entries were ignored as invalid:").pack(anchor='w', padx=10, pady=5)
+        box = scrolledtext.ScrolledText(popup, height=12)
+        box.pack(fill='both', expand=True, padx=10, pady=5)
+        box.insert(tk.END, "\n".join(self.rejected_usernames))
+        box.config(state='disabled')
 
     def remove_selected_users(self):
         selected_indices = list(self.user_listbox.curselection())[::-1]
