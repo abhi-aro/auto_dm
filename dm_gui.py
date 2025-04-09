@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, scrolledtext, messagebox
+from tkinter import filedialog, scrolledtext, messagebox, simpledialog
 import threading
 import re
 import csv
@@ -73,9 +73,28 @@ class InstagramDMTool:
         if path:
             self.file_path = path
             self.file_label.config(text=f"Selected: {path}")
-            self.extract_usernames_from_file(path)
+            if path.endswith((".xls", ".xlsx")):
+                self.select_excel_column(path)
+            else:
+                self.extract_usernames_from_file(path)
         else:
             self.file_label.config(text="No file selected")
+
+    def select_excel_column(self, path):
+        try:
+            excel_file = pd.ExcelFile(path, engine='openpyxl')
+            sheet = simpledialog.askstring("Select Sheet", f"Available sheets:\n{', '.join(excel_file.sheet_names)}\n\nEnter sheet name:")
+            if sheet not in excel_file.sheet_names:
+                messagebox.showerror("Error", "Invalid sheet name.")
+                return
+            df = pd.read_excel(excel_file, sheet_name=sheet, dtype=str)
+            col = simpledialog.askstring("Select Column", f"Available columns:\n{', '.join(df.columns)}\n\nEnter column name:")
+            if col not in df.columns:
+                messagebox.showerror("Error", "Invalid column name.")
+                return
+            self.extract_usernames_from_dataframe(df[[col]])
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to read Excel file: {e}")
 
     def extract_usernames_from_file(self, path):
         self.user_listbox.delete(0, tk.END)
@@ -110,12 +129,40 @@ class InstagramDMTool:
                 for row in reader:
                     for value in row:
                         extract_from_value(value)
-        elif path.endswith((".xls", ".xlsx")):
-            df = pd.read_excel(path, dtype=str, engine='openpyxl')
-            for column in df.columns:
-                for value in df[column]:
-                    extract_from_value(value)
 
+        self.finalize_usernames(username_set)
+
+    def extract_usernames_from_dataframe(self, df):
+        self.user_listbox.delete(0, tk.END)
+        self.usernames.clear()
+        self.rejected_usernames.clear()
+        username_set = set()
+
+        pattern = re.compile(
+            r"(?:https?://)?(?:www\.)?(?:instagram\.com|Instagram\.com)/([a-zA-Z0-9._]+)(?:[/?].*)?$",
+            re.IGNORECASE
+        )
+
+        for col in df.columns:
+            for value in df[col]:
+                raw = str(value).strip()
+                match = pattern.search(raw)
+                if match:
+                    username = match.group(1)
+                    lower = username.lower()
+                    if lower in ["p", "reel", "invite", "invites", "explore", "stories", "contact", "directory", "accounts"]:
+                        self.rejected_usernames.append(raw)
+                    else:
+                        username_set.add(username)
+                elif re.match(r"^@?[a-zA-Z0-9._]+$", raw):  # raw username
+                    username = raw.lstrip("@")
+                    username_set.add(username)
+                else:
+                    self.rejected_usernames.append(raw)
+
+        self.finalize_usernames(username_set)
+
+    def finalize_usernames(self, username_set):
         self.usernames = sorted(list(username_set))
         for user in self.usernames:
             self.user_listbox.insert(tk.END, user)
