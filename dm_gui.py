@@ -3,17 +3,16 @@ from tkinter import filedialog, scrolledtext, messagebox
 import threading
 import re
 import csv
+import pandas as pd
 
 class InstagramDMTool:
     def __init__(self, root):
         self.root = root
         self.root.title("Instagram DM Automation Tool")
-        self.root.geometry("700x600")
+        self.root.geometry("700x620")
         self.file_path = None
         self.usernames = []
-        self.is_paused = False
-        self.is_stopped = False
-
+        self.state = 'idle'  # idle, running, paused
         self.build_ui()
 
     def build_ui(self):
@@ -23,7 +22,7 @@ class InstagramDMTool:
         self.message_entry.pack(fill='x', padx=10)
 
         # File selector
-        tk.Button(self.root, text="Select CSV File", command=self.select_file).pack(pady=5)
+        tk.Button(self.root, text="Select Input File", command=self.select_file).pack(pady=5)
         self.file_label = tk.Label(self.root, text="No file selected", fg="gray")
         self.file_label.pack()
 
@@ -32,7 +31,6 @@ class InstagramDMTool:
         self.user_listbox = tk.Listbox(self.root, selectmode=tk.MULTIPLE, height=10)
         self.user_listbox.pack(fill='both', padx=10, pady=(0, 10), expand=False)
 
-        # Remove selected
         tk.Button(self.root, text="Remove Selected Usernames", command=self.remove_selected_users).pack(pady=(0, 10))
 
         # Buttons
@@ -56,6 +54,8 @@ class InstagramDMTool:
         self.log_area = scrolledtext.ScrolledText(self.root, height=10, state='disabled')
         self.log_area.pack(fill='both', padx=10, pady=(0, 10), expand=True)
 
+        self.update_buttons()
+
     def log(self, text):
         self.log_area.config(state='normal')
         self.log_area.insert(tk.END, text + "\n")
@@ -63,35 +63,50 @@ class InstagramDMTool:
         self.log_area.config(state='disabled')
 
     def select_file(self):
-        path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
+        path = filedialog.askopenfilename(filetypes=[
+            ("Supported files", "*.csv *.txt *.xls *.xlsx"),
+            ("CSV", "*.csv"),
+            ("Text", "*.txt"),
+            ("Excel", "*.xls *.xlsx")
+        ])
         if path:
             self.file_path = path
             self.file_label.config(text=f"Selected: {path}")
-            self.extract_usernames_from_csv(path)
+            self.extract_usernames_from_file(path)
         else:
             self.file_label.config(text="No file selected")
 
-    def extract_usernames_from_csv(self, path):
+    def extract_usernames_from_file(self, path):
         self.user_listbox.delete(0, tk.END)
         self.usernames.clear()
         username_set = set()
         pattern = re.compile(r"(?:https?://)?(?:www\.)?instagram\.com/([^/?\s]+)|^@?([a-zA-Z0-9._]+)$")
 
-        with open(path, newline='', encoding='utf-8') as csvfile:
-            reader = csv.reader(csvfile)
-            for row in reader:
-                for value in row:
-                    match = pattern.search(value.strip())
-                    if match:
-                        username = match.group(1) or match.group(2)
-                        if username and not username.startswith("invite") and username not in username_set:
-                            username_set.add(username)
-                            self.usernames.append(username)
+        def extract_from_value(value):
+            match = pattern.search(str(value).strip())
+            if match:
+                username = match.group(1) or match.group(2)
+                if username and not username.startswith(("invite", "p", "reel", "explore")):
+                    username_set.add(username)
 
+        if path.endswith(".csv") or path.endswith(".txt"):
+            with open(path, newline='', encoding='utf-8') as f:
+                reader = csv.reader(f) if path.endswith('.csv') else (line.split() for line in f)
+                for row in reader:
+                    for value in row:
+                        extract_from_value(value)
+        elif path.endswith((".xls", ".xlsx")):
+            df = pd.read_excel(path, dtype=str, engine='openpyxl')
+            for column in df.columns:
+                for value in df[column]:
+                    extract_from_value(value)
+
+        self.usernames = sorted(list(username_set))
         for user in self.usernames:
             self.user_listbox.insert(tk.END, user)
 
         self.log(f"{len(self.usernames)} usernames loaded.")
+        self.update_buttons()
 
     def remove_selected_users(self):
         selected_indices = list(self.user_listbox.curselection())[::-1]
@@ -100,6 +115,24 @@ class InstagramDMTool:
             self.usernames.remove(username)
             self.user_listbox.delete(i)
         self.log("Selected usernames removed.")
+        self.update_buttons()
+
+    def update_buttons(self):
+        if self.state == 'idle':
+            self.start_btn.config(state='normal' if self.usernames else 'disabled')
+            self.pause_btn.config(state='disabled')
+            self.resume_btn.config(state='disabled')
+            self.stop_btn.config(state='disabled')
+        elif self.state == 'running':
+            self.start_btn.config(state='disabled')
+            self.pause_btn.config(state='normal')
+            self.resume_btn.config(state='disabled')
+            self.stop_btn.config(state='normal')
+        elif self.state == 'paused':
+            self.start_btn.config(state='disabled')
+            self.pause_btn.config(state='disabled')
+            self.resume_btn.config(state='normal')
+            self.stop_btn.config(state='normal')
 
     def start(self):
         if not self.usernames:
@@ -110,38 +143,41 @@ class InstagramDMTool:
             messagebox.showerror("Error", "Please enter a message to send.")
             return
 
-        self.is_stopped = False
-        self.is_paused = False
-        self.start_btn.config(state='disabled')
+        self.state = 'running'
+        self.update_buttons()
         threading.Thread(target=self.run_dm_process, daemon=True).start()
 
     def pause(self):
-        self.is_paused = True
-        self.log("Paused.")
+        if self.state == 'running':
+            self.state = 'paused'
+            self.log("Paused.")
+            self.update_buttons()
 
     def resume(self):
-        if self.is_paused:
-            self.is_paused = False
+        if self.state == 'paused':
+            self.state = 'running'
             self.log("Resumed.")
+            self.update_buttons()
 
     def stop(self):
-        self.is_stopped = True
-        self.start_btn.config(state='normal')
+        self.state = 'idle'
         self.log("Stopped.")
+        self.update_buttons()
 
     def run_dm_process(self):
         self.log("Starting DM process...")
         import time
         for i, username in enumerate(self.usernames, start=1):
-            if self.is_stopped:
+            if self.state == 'idle':
                 self.log("Process stopped.")
                 break
-            while self.is_paused:
+            while self.state == 'paused':
                 time.sleep(1)
             self.log(f"[{i}/{len(self.usernames)}] Ready to message @{username}")
-            time.sleep(1)  # Placeholder for actual send logic
+            time.sleep(1)  # Placeholder for actual sending logic
         self.log("DM process completed.")
-        self.start_btn.config(state='normal')
+        self.state = 'idle'
+        self.update_buttons()
 
 if __name__ == "__main__":
     root = tk.Tk()
