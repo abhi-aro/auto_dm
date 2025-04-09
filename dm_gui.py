@@ -1,5 +1,6 @@
 import tkinter as tk
-from tkinter import filedialog, scrolledtext, messagebox, simpledialog
+from tkinter import filedialog, scrolledtext, messagebox
+from tkinter import ttk
 import threading
 import re
 import csv
@@ -13,28 +14,24 @@ class InstagramDMTool:
         self.file_path = None
         self.usernames = []
         self.rejected_usernames = []
-        self.state = 'idle'  # idle, running, paused
+        self.state = 'idle'
         self.build_ui()
 
     def build_ui(self):
-        # Message input
         tk.Label(self.root, text="Enter Message to Send:").pack(anchor='w', padx=10, pady=(10, 0))
         self.message_entry = tk.Text(self.root, height=4, wrap='word', font=("Segoe UI Emoji", 11))
         self.message_entry.pack(fill='x', padx=10)
 
-        # File selector
         tk.Button(self.root, text="Select Input File", command=self.select_file).pack(pady=5)
         self.file_label = tk.Label(self.root, text="No file selected", fg="gray")
         self.file_label.pack()
 
-        # Username list
         tk.Label(self.root, text="Usernames to DM:").pack(anchor='w', padx=10, pady=(10, 0))
         self.user_listbox = tk.Listbox(self.root, selectmode=tk.MULTIPLE, height=10)
         self.user_listbox.pack(fill='both', padx=10, pady=(0, 10), expand=False)
 
         tk.Button(self.root, text="Remove Selected Usernames", command=self.remove_selected_users).pack(pady=(0, 10))
 
-        # Buttons
         btn_frame = tk.Frame(self.root)
         btn_frame.pack(pady=10)
 
@@ -50,7 +47,6 @@ class InstagramDMTool:
         self.stop_btn = tk.Button(btn_frame, text="Stop", command=self.stop)
         self.stop_btn.pack(side='left', padx=5)
 
-        # Log area
         tk.Label(self.root, text="Log:").pack(anchor='w', padx=10, pady=(10, 0))
         self.log_area = scrolledtext.ScrolledText(self.root, height=10, state='disabled')
         self.log_area.pack(fill='both', padx=10, pady=(0, 10), expand=True)
@@ -74,25 +70,48 @@ class InstagramDMTool:
             self.file_path = path
             self.file_label.config(text=f"Selected: {path}")
             if path.endswith((".xls", ".xlsx")):
-                self.select_excel_column(path)
+                self.select_excel_sheet_column(path)
             else:
                 self.extract_usernames_from_file(path)
         else:
             self.file_label.config(text="No file selected")
 
-    def select_excel_column(self, path):
+    def select_excel_sheet_column(self, path):
         try:
             excel_file = pd.ExcelFile(path, engine='openpyxl')
-            sheet = simpledialog.askstring("Select Sheet", f"Available sheets:\n{', '.join(excel_file.sheet_names)}\n\nEnter sheet name:")
-            if sheet not in excel_file.sheet_names:
-                messagebox.showerror("Error", "Invalid sheet name.")
-                return
-            df = pd.read_excel(excel_file, sheet_name=sheet, dtype=str)
-            col = simpledialog.askstring("Select Column", f"Available columns:\n{', '.join(df.columns)}\n\nEnter column name:")
-            if col not in df.columns:
-                messagebox.showerror("Error", "Invalid column name.")
-                return
-            self.extract_usernames_from_dataframe(df[[col]])
+            popup = tk.Toplevel(self.root)
+            popup.title("Select Sheet and Column")
+            popup.geometry("350x200")
+
+            tk.Label(popup, text="Choose Sheet:").pack(pady=(10, 5))
+            sheet_var = tk.StringVar()
+            sheet_menu = ttk.Combobox(popup, textvariable=sheet_var, values=excel_file.sheet_names, state="readonly")
+            sheet_menu.pack(pady=5)
+
+            tk.Label(popup, text="Choose Column:").pack(pady=(10, 5))
+            column_var = tk.StringVar()
+            column_menu = ttk.Combobox(popup, textvariable=column_var, state="readonly")
+            column_menu.pack(pady=5)
+
+            def on_sheet_select(event):
+                selected_sheet = sheet_var.get()
+                df = pd.read_excel(excel_file, sheet_name=selected_sheet, dtype=str)
+                column_menu['values'] = list(df.columns)
+
+            sheet_menu.bind("<<ComboboxSelected>>", on_sheet_select)
+
+            def confirm_selection():
+                sheet = sheet_var.get()
+                column = column_var.get()
+                if sheet and column:
+                    df = pd.read_excel(excel_file, sheet_name=sheet, dtype=str)
+                    popup.destroy()
+                    self.extract_usernames_from_dataframe(df[[column]])
+                else:
+                    messagebox.showerror("Error", "Please select both sheet and column.")
+
+            tk.Button(popup, text="Confirm", command=confirm_selection).pack(pady=15)
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to read Excel file: {e}")
 
@@ -117,7 +136,7 @@ class InstagramDMTool:
                     self.rejected_usernames.append(raw)
                 else:
                     username_set.add(username)
-            elif re.match(r"^@?[a-zA-Z0-9._]+$", raw):  # raw username
+            elif re.match(r"^@?[a-zA-Z0-9._]+$", raw):
                 username = raw.lstrip("@")
                 username_set.add(username)
             else:
@@ -154,7 +173,7 @@ class InstagramDMTool:
                         self.rejected_usernames.append(raw)
                     else:
                         username_set.add(username)
-                elif re.match(r"^@?[a-zA-Z0-9._]+$", raw):  # raw username
+                elif re.match(r"^@?[a-zA-Z0-9._]+$", raw):
                     username = raw.lstrip("@")
                     username_set.add(username)
                 else:
@@ -248,7 +267,7 @@ class InstagramDMTool:
             while self.state == 'paused':
                 time.sleep(1)
             self.log(f"[{i}/{len(self.usernames)}] Ready to message @{username}")
-            time.sleep(1)  # Placeholder for actual sending logic
+            time.sleep(1)
         self.log("DM process completed.")
         self.state = 'idle'
         self.update_buttons()
