@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, scrolledtext, messagebox
 from tkinter import ttk
+from tkinter.font import Font
 import threading
 import re
 import csv
@@ -19,7 +20,12 @@ class InstagramDMTool:
 
     def build_ui(self):
         tk.Label(self.root, text="Enter Message to Send:").pack(anchor='w', padx=10, pady=(10, 0))
-        self.message_entry = tk.Text(self.root, height=4, wrap='word', font=("Segoe UI Emoji", 11))
+
+        emoji_font = Font(family="Segoe UI Emoji", size=11)
+        self.message_entry = tk.Text(self.root, height=4, wrap='word')
+        self.message_entry.configure(font=emoji_font)
+        self.message_entry.insert("1.0", "Type your message here... 💬")
+        self.message_entry.bind("<FocusIn>", self.clear_placeholder)
         self.message_entry.pack(fill='x', padx=10)
 
         tk.Button(self.root, text="Select Input File", command=self.select_file).pack(pady=5)
@@ -52,6 +58,11 @@ class InstagramDMTool:
         self.log_area.pack(fill='both', padx=10, pady=(0, 10), expand=True)
 
         self.update_buttons()
+
+    def clear_placeholder(self, event):
+        current = self.message_entry.get("1.0", tk.END).strip()
+        if current == "Type your message here... 💬":
+            self.message_entry.delete("1.0", tk.END)
 
     def log(self, text):
         self.log_area.config(state='normal')
@@ -232,7 +243,7 @@ class InstagramDMTool:
             messagebox.showerror("Error", "No usernames to message.")
             return
         message = self.message_entry.get("1.0", tk.END).strip()
-        if not message:
+        if not message or message == "Type your message here... 💬":
             messagebox.showerror("Error", "Please enter a message to send.")
             return
 
