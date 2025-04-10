@@ -12,6 +12,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
+import pyperclip
 
 COOKIES_FILE = "cookies/insta_session.pkl"
 INSTAGRAM_URL = "https://www.instagram.com"
@@ -98,13 +99,11 @@ class InstagramBot:
             self.driver.execute_script("arguments[0].focus();", textarea)
             time.sleep(1)
 
+            # ✅ Emoji-safe paste using clipboard
+            pyperclip.copy(message)
             actions = ActionChains(self.driver)
-            lines = message.split("\n")
-
-            for line in lines:
-                textarea.send_keys(line)
-                actions.key_down(Keys.SHIFT).send_keys(Keys.ENTER).key_up(Keys.SHIFT).perform()
-                time.sleep(0.2)
+            actions.move_to_element(textarea).click().key_down(Keys.CONTROL).send_keys("v").key_up(Keys.CONTROL).perform()
+            time.sleep(1)
 
             if mode == "auto":
                 textarea.send_keys(Keys.ENTER)
@@ -112,7 +111,6 @@ class InstagramBot:
             else:
                 print(f"🕒 Manual review required for @{username}. Click Send manually if needed.")
 
-            # detect popups or errors
             try:
                 popup = self.driver.find_element(By.XPATH, "//div[@role='dialog']")
                 print(f"⚠️ Popup detected for {username}, please check manually.")
