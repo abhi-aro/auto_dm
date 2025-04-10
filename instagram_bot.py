@@ -81,10 +81,10 @@ class InstagramBot:
             except NoSuchElementException:
                 try:
                     print("⚠️ Trying alternate message button for private account")
-                    menu_btn = self.driver.find_element(By.XPATH, "//div[@role='button'][@tabindex='0']")
+                    menu_btn = self.driver.find_element(By.XPATH, "/html/body/div[1]/div/div/div[2]/div/div/div[1]/div[2]/div/div[1]/section/main/div/header/section[2]/div/div/div[3]")
                     menu_btn.click()
                     time.sleep(2)
-                    message_button_2 = self.driver.find_element(By.XPATH, "//div[text()='Send Message']")
+                    message_button_2 = self.driver.find_element(By.XPATH, "/html/body/div[4]/div[1]/div/div[2]/div/div/div/div/div/button[6]")
                     message_button_2.click()
                 except Exception as e:
                     print(f"❌ Message button not found for {username}: {e}")
