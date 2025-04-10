@@ -62,6 +62,7 @@ class DMApp(QWidget):
 
         layout.addWidget(QLabel("Usernames to DM:"))
         self.user_list = QListWidget()
+        self.user_list.setSelectionMode(QListWidget.ExtendedSelection)
         layout.addWidget(self.user_list)
 
         remove_btn = QPushButton("Remove Selected Usernames")
@@ -189,11 +190,26 @@ class DMApp(QWidget):
 
     def remove_selected_users(self):
         selected = self.user_list.selectedItems()
-        for item in selected:
-            self.usernames.remove(item.text())
-            self.user_list.takeItem(self.user_list.row(item))
-        self.log("Selected usernames removed.")
-        self.update_buttons()
+        if not selected:
+            QMessageBox.information(self, "No Selection", "Please select usernames to remove.")
+            return
+
+        usernames_to_remove = [item.text() for item in selected]
+
+        confirm_text = "\n".join(usernames_to_remove)
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Removal",
+            f"The following usernames will be removed:\n\n{confirm_text}\n\nContinue?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if confirm == QMessageBox.Yes:
+            for item in selected:
+                self.usernames.remove(item.text())
+                self.user_list.takeItem(self.user_list.row(item))
+            self.log(f"Removed {len(usernames_to_remove)} usernames.")
+            self.update_buttons()
 
     def start_process(self):
         message = self.message_input.toPlainText().strip()
